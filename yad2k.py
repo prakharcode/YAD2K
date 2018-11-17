@@ -13,8 +13,8 @@ from collections import defaultdict
 
 import numpy as np
 from keras import backend as K
-from keras.layers import (Conv2D, GlobalAveragePooling2D, Input, Lambda,
-                          MaxPooling2D)
+from keras.layers import (Conv2D, GlobalAveragePooling2D, Input, Lambda, Reshape,
+                          UpSampling2D, MaxPooling2D)
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.merge import concatenate
 from keras.layers.normalization import BatchNormalization
@@ -98,6 +98,7 @@ def _main(args):
         image_width = int(cfg_parser['net_0']['width'])
     prev_layer = Input(shape=(image_height, image_width, 3))
     all_layers = [prev_layer]
+    outputs = []
 
     weight_decay = float(cfg_parser['net_0']['decay']
                          ) if 'net_0' in cfg_parser.sections() else 5e-4
@@ -196,6 +197,26 @@ def _main(args):
                 act_layer = LeakyReLU(alpha=0.1)(prev_layer)
                 prev_layer = act_layer
                 all_layers.append(act_layer)
+
+        elif section.startswith('upsample'):
+            stride = int(cfg_parser[section]['stride'])
+            all_layers.append(
+                UpSampling2D(
+                    size=(stride, stride))(prev_layer))
+            prev_layer = all_layers[-1]
+
+        elif section.startswith('yolo'):
+            classes = int(cfg_parser[section]['classes'])
+            # num = int(cfg_parser[section]['num'])
+            # mask = int(cfg_parser[section]['mask'])
+            n1, n2 = int(prev_layer.shape[1]), int(prev_layer.shape[2])
+            n3 = 3
+            n4 = (4 + 1 + classes)
+            yolo = Reshape((n1, n2, n3, n4))(prev_layer)
+            all_layers.append(yolo)
+            prev_layer = all_layers[-1]
+            outputs.append(len(all_layers) - 1)
+
 
         elif section.startswith('maxpool'):
             size = int(cfg_parser[section]['size'])
